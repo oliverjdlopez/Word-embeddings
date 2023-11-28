@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>wvec</title>
+    <style>
+        html,
+        body,
+        #map {
+            height: 100%;
+            margin: 0px;
+            padding: 0px;
+            z-index: 0;
+        }
+
+        #info {
+            z-index: 1;
+            position: absolute;
+            top: 25px;
+            left: 100px;
+        }
+    </style>
+    <link rel='stylesheet' href='./leaflet/leaflet.css' />
+    <link rel="stylesheet" href="./zs/L.Control.Zoomslider.css" />
+    <script src='./leaflet/leaflet.js'></script>
+</head>
+
+<body>
+    <script src="./zs/L.Control.Zoomslider.js"></script>
+    <div id='map'></div>
+    <div id='info'>
+        <div>
+            (Note: small-scale test based on 3 months of articles with 130k multi-gram vocab,<br>
+            &nbsp; t-sne reduced from 200 dimensional word embedding [A. Alemi and P. Ginsparg].<br>
+            &nbsp; Zoom in to see words... WordSearch does nothing if word not in vocab.)<br>
+        </div>
+        <label for='search'>WordSearch: </label>
+        <input id='search' type='search' />
+        <!--            <div>
+                <select id='selector'>
+                <option selected='selected' value='zoom'>zoom</option>
+                <option value='umap-nn7-0.000'>umap-nn7-0.0003</option>
+                </select>
+                </div> -->
+    </div>
+</body>
+
+<script>
+
+    var X = 256;
+    var bdx = []
+    var bdy = []
+    var marker = null;
+    var map;
+
+    var bd = null;
+    var words = null;
+
+    L.Icon.Default.prototype.options.iconUrl = 'marker-icon-r.png';
+    L.Icon.Default.prototype.options.iconRetinaUrl = 'marker-icon-r-2x.png';
+    L.Icon.Default.prototype.options.iconSize = [27, 43];
+    L.Icon.Default.prototype.options.iconAnchor = [14, 42];
+
+    function loadmap(name) {
+        if (map) { map.remove(); }
+
+        map = L.map('map', {
+            crs: L.CRS.Simple,
+            bounds: [[0, 256], [0, 256]],
+            center: [-X / 2, X / 2],
+            zoom: 1,
+            minZoom: 1,
+            maxZoom: 8,
+            zoomsliderControl: true,
+            zoomControl: false,
+        });
+
+        var bounds = L.latLngBounds(
+            map.unproject([0, 2 * 256], map.getMinZoom()),
+            map.unproject([2 * 256, 0], map.getMinZoom())
+        );
+
+        L.tileLayer('./' + name + '/{z}/{x}/{y}.png', {
+            minZoom: 1,
+            maxZoom: 8,
+            center: [0, 0],
+            noWrap: true,
+            tms: false,
+            bounds: bounds
+        }).addTo(map);
+
+        /*    fetchJSONFile('./'+name+'/boundaries.json', function(data){bd = data;});
+            fetchJSONFile('./'+name+'/words.json', function(data){words = data;});  */
+        fetchJSONFile('./data/lmap-boundaries.json', function (data) { bd = data; });
+        fetchJSONFile('./data/word-locations.json', function (data) { words = data; });
+        marker = null;
+    }
+
+    function fetchJSONFile(path, callback) {
+        var httpRequest = new XMLHttpRequest();
+        httpRequest.onreadystatechange = function () {
+            if (httpRequest.readyState === 4) {
+                if (httpRequest.status === 200) {
+                    var data = JSON.parse(httpRequest.responseText);
+                    if (callback) callback(data);
+                }
+            }
+        };
+        httpRequest.open('GET', path);
+        httpRequest.send();
+    }
+
+    function clear_marker() {
+        if (marker) {
+            map.removeLayer(marker);
+            marker = null;
+        }
+    }
+
+    function change_search(event) {
+        var elem = document.getElementById('search');
+        var word = elem.value;
+
+        if (event.key === 'Escape') {
+            elem.value = '';
+            word = '';
+            clear_marker();
+        }
+
+        if (!word) {
+            clear_marker();
+        }
+
+        if (event.keyCode !== 13)
+            return;
+
+        if (!words[word]) {
+            clear_marker()
+            return;
+        }
+
+        var y = -words[word][0];
+        var x = words[word][1];
+        var xx = X * (x - bd[0][0]) / (bd[0][1] - bd[0][0]);
+        var yy = X * (y - bd[1][1]) / (bd[1][0] - bd[1][1]);
+        var pair = [-yy, xx];
+        var ltlg = L.latLng(pair);
+
+        if (!marker) {
+            marker = L.marker(pair);
+            marker.addTo(map)
+        } else {
+            marker.setLatLng(ltlg);
+        }
+
+        map.setView(ltlg, map.getZoom());
+    }
+
+    function change_map(event) {
+        /*    var name = document.getElementById('selector').value; */
+        var name = 'zoom_96000_10';
+        loadmap(name);
+    }
+
+    change_map();
+
+    document.getElementById('search').onkeyup = change_search;
+    document.getElementById('selector').onchange = change_map;
+
+</script>
+
+</html>
